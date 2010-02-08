@@ -1,13 +1,12 @@
 #include "bson.h"
 #include "mongo.h"
+#include "oplog.h"
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>
 #include <unistd.h>
 
 int main() {
-    bson_buffer bb;
-    bson b, q, ts, order;
     mongo_connection conn;
     mongo_connection_options opts;
     mongo_cursor *cursor;
@@ -21,25 +20,7 @@ int main() {
     while (1) {
         printf("Looping.\n");
 
-        bson_buffer_init(&bb);
-        bson_append_timestamp(&bb, "$gt", last);
-        bson_from_buffer(&ts, &bb);
-
-        bson_buffer_init(&bb);
-        bson_append_string(&bb, "ns", "test.pv");
-        bson_append_bson(&bb, "ts", &ts);
-        bson_from_buffer(&q, &bb);
-
-        bson_buffer_init(&bb);
-        bson_append_long(&bb, "$natural", 1);
-        bson_from_buffer(&order, &bb);
-
-        bson_buffer_init(&bb);
-        bson_append_bson(&bb, "query", &q);
-        bson_append_bson(&bb, "orderby", &order);
-        bson_from_buffer(&b, &bb);
-
-        cursor = mongo_find(&conn, "local.oplog.$main", &b, NULL, 0, 0, 0);
+        cursor = pv_oplog_since(&conn, last);
 
         while (mongo_cursor_next(cursor)) {
             const char *op;
@@ -57,10 +38,6 @@ int main() {
         }
 
         mongo_cursor_destroy(cursor);
-        bson_destroy(&ts);
-        bson_destroy(&q);
-        bson_destroy(&order);
-        bson_destroy(&b);
 
         sleep(3);
     }
