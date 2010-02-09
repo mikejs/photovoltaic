@@ -9,6 +9,9 @@ static CURL *curl = NULL;
 void solr_init() {
     curl_global_init(CURL_GLOBAL_NOTHING);
     curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1);
+    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8983/solr/update");
 }
 
 solr_doc solr_doc_new(const char *id) {
@@ -55,11 +58,8 @@ void solr_add_doc(solr_doc doc) {
     struct curl_slist *headers = NULL;
     char* xml = solr_add_doc_xml(doc);
 
-    printf("%s\n", xml);
-
     headers = curl_slist_append(headers, "Content-Type: text/xml");
 
-    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8983/solr/update");
     curl_easy_setopt(curl, CURLOPT_POST, 1);
     curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, xml);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);

@@ -13,15 +13,8 @@ int main() {
     mongo_cursor *cursor;
     bson_iterator it;
     bson_timestamp_t last = 0;
-    solr_doc doc;
 
     solr_init();
-    doc = solr_doc_new("id1");
-    solr_doc_add_field(doc, "field1_s", "blah");
-    solr_doc_add_field(doc, "field2_s", "blah2");
-    solr_add_doc(doc);
-    solr_doc_free(doc);
-    solr_cleanup();
 
     strcpy(opts.host, "127.0.0.01");
     opts.port = 27017;
@@ -34,16 +27,59 @@ int main() {
 
         while (mongo_cursor_next(cursor)) {
             const char *op;
+            bson o, o2;
+            bson_type type;
+            solr_doc doc;
+
             bson_find(&it, &cursor->current, "ts");
             last = bson_iterator_timestamp(&it);
 
             bson_find(&it, &cursor->current, "op");
             op = bson_iterator_string(&it);
 
+            bson_find(&it, &cursor->current, "o");
+            bson_iterator_subobject(&it, &o);
+
             if(op[0] == 'i') {
                 printf("Insert %"PRIi64".\n", last);
+                o2 = o;
             } else if(op[0] == 'u') {
                 printf("Update %"PRIi64".\n", last);
+                bson_find(&it, &cursor->current, "o2");
+                bson_iterator_subobject(&it, &o2);
+            }
+
+            bson_find(&it, &o2, "_id");
+            type = bson_iterator_type(&it);
+
+            if (type == bson_string) {
+                doc = solr_doc_new(bson_iterator_string(&it));
+            } else if (type == bson_oid) {
+                char oidhex[25];
+                bson_oid_to_string(bson_iterator_oid(&it), oidhex);
+                doc = solr_doc_new(oidhex);
+            } else {
+                /* Can't handle other _id types yet */
+                continue;
+            }
+
+            bson_iterator_subobject(&it, &o);
+            while ((type = bson_iterator_next(&it)) != bson_eoo) {
+                const char *key = bson_iterator_key(&it);
+
+                if (type == bson_string) {
+                    char *new_key;
+                    new_key = malloc(strlen(key) + 2 + 1);
+                    strcpy(new_key, key);
+                    strcat(new_key, "_s");
+                    solr_doc_add_field(doc, new_key, bson_iterator_string(&it));
+                    free(new_key);
+                } else {
+                    continue;
+                }
+
+                solr_add_doc(doc);
+                solr_doc_free(doc);
             }
         }
 
@@ -51,6 +87,8 @@ int main() {
 
         sleep(3);
     }
+
+    solr_cleanup();
 
     return 0;
 }
