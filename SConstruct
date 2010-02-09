@@ -1,5 +1,6 @@
 # -*- mode: python; -*-
 import os
+import subprocess
 
 AddOption('--c99',
           dest='use_c99',
@@ -7,11 +8,21 @@ AddOption('--c99',
           action='store_true',
           help='Compile with C99 (recommended for gcc)')
 
+libs = ["mongoc", "bson", "curl"]
+
 env = Environment(ENV=os.environ)
-env.Append(LIBPATH=".")
+env.AppendUnique(LIBPATH=["."])
 env.Append(CFLAGS=" -pedantic -Wall -ggdb ")
+env.Append(CFLAGS=subprocess.Popen(
+        ["xml2-config", "--cflags"], stdout=subprocess.PIPE).communicate()[0])
+
+xml_libs = subprocess.Popen(['xml2-config', '--libs'],
+                            stdout=subprocess.PIPE).communicate()[0].split()
+env.AppendUnique(LIBPATH=[xml_libs[0][2:]])
+for lib in xml_libs[1:]:
+    libs.append(lib[2:])
+
 conf = Configure(env)
-libs = ["mongoc", "bson"]
 
 if GetOption('use_c99'):
     env.Append(CFLAGS=" -std=c99 ")
@@ -41,7 +52,7 @@ for x in libs:
 
 env = conf.Finish()
 
-files = ['main.c', 'oplog.c']
+files = ['main.c', 'oplog.c', 'solr.c']
 
 env.Program('photovoltaic', files, LIBS=libs)
 

@@ -1,6 +1,7 @@
 #include "bson.h"
 #include "mongo.h"
 #include "oplog.h"
+#include "solr.h"
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>
@@ -12,6 +13,15 @@ int main() {
     mongo_cursor *cursor;
     bson_iterator it;
     bson_timestamp_t last = 0;
+    solr_doc doc;
+
+    solr_init();
+    doc = solr_doc_new("id1");
+    solr_doc_add_field(doc, "field1_s", "blah");
+    solr_doc_add_field(doc, "field2_s", "blah2");
+    solr_add_doc(doc);
+    solr_doc_free(doc);
+    solr_cleanup();
 
     strcpy(opts.host, "127.0.0.01");
     opts.port = 27017;
