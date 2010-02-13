@@ -24,6 +24,10 @@
 
 static CURL *curl = NULL;
 
+struct solr_docset_t {
+    solr_doc docs;
+};
+
 void solr_init() {
     curl_global_init(CURL_GLOBAL_NOTHING);
     curl = curl_easy_init();
@@ -54,6 +58,33 @@ void solr_doc_free(solr_doc doc) {
     xmlFreeNode(doc);
 }
 
+solr_docset solr_docset_new() {
+    solr_docset docset = malloc(sizeof(struct solr_docset_t));
+    docset->docs = NULL;
+    return docset;
+}
+
+void solr_docset_add_doc(solr_docset docset, solr_doc doc) {
+    if (docset->docs == NULL) {
+        docset->docs = doc;
+    } else {
+        xmlAddSibling(docset->docs, doc);
+    }
+}
+
+void solr_docset_clear(solr_docset docset) {
+    xmlFreeNodeList(docset->docs);
+    docset->docs = NULL;
+}
+
+void solr_docset_free(solr_docset docset) {
+    if(docset != NULL) {
+        xmlFreeNodeList(docset->docs);
+    }
+
+    free(docset);
+}
+
 static char* solr_add_doc_xml(solr_doc doc) {
     xmlDocPtr xml = NULL;
     xmlNodePtr root = NULL;
@@ -63,7 +94,7 @@ static char* solr_add_doc_xml(solr_doc doc) {
     xml = xmlNewDoc(BAD_CAST "1.0");
     root = xmlNewNode(NULL, BAD_CAST "add");
     xmlDocSetRootElement(xml, root);
-    xmlAddChild(root, xmlCopyNode(doc, 1));
+    xmlAddChildList(root, xmlCopyNodeList(doc));
 
     xmlDocDumpFormatMemory(xml, &xmlbuff, &buffersize, 1);
     xmlFreeDoc(xml);
@@ -85,6 +116,13 @@ void solr_add_doc(solr_doc doc) {
 
     xmlFree(xml);
     curl_slist_free_all(headers);
+}
+
+void solr_add_docset(solr_docset docset) {
+    /* Don't add empty docset */
+    if (docset->docs != NULL) {
+        solr_add_doc(docset->docs);
+    }
 }
 
 void solr_cleanup() {

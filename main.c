@@ -133,6 +133,7 @@ int main(int argc, char **argv) {
     mongo_cursor *cursor;
     bson_iterator it;
     bson_timestamp_t last = 0;
+    solr_docset docset;
 
     memset(&conf, 0, sizeof(pv_conf));
 
@@ -149,6 +150,8 @@ int main(int argc, char **argv) {
     printf("Polling interval: %d\n", conf.poll_interval);
 
     solr_init();
+
+    docset = solr_docset_new();
 
     while (1) {
         printf("Looping.\n");
@@ -208,16 +211,19 @@ int main(int argc, char **argv) {
                     continue;
                 }
 
-                solr_add_doc(doc);
-                solr_doc_free(doc);
+                solr_docset_add_doc(docset, doc);
             }
         }
+
+        solr_add_docset(docset);
+        solr_docset_clear(docset);
 
         mongo_cursor_destroy(cursor);
 
         sleep(conf.poll_interval);
     }
 
+    solr_docset_free(docset);
     solr_cleanup();
 
     return 0;

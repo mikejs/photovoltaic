@@ -23,6 +23,7 @@
 #include <libxml/parser.h>
 
 typedef xmlNodePtr solr_doc;
+typedef struct solr_docset_t *solr_docset;
 
 void solr_init();
 void solr_cleanup();
@@ -31,7 +32,12 @@ solr_doc solr_doc_new(const char *id);
 void solr_doc_free(solr_doc doc);
 void solr_doc_add_field(solr_doc doc, const char *name, const char *content);
 
-void solr_add_doc(solr_doc doc);
+solr_docset solr_docset_new();
+void solr_docset_free(solr_docset docset);
+void solr_docset_add_doc(solr_docset docset, solr_doc doc);
+void solr_docset_clear(solr_docset docset);
 
+void solr_add_doc(solr_doc doc);
+void solr_add_docset(solr_docset docset);
 
 #endif
