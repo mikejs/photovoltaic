@@ -41,7 +41,7 @@ mongo_cursor* pv_oplog_since(mongo_connection *conn,
     bson_append_bson(&bb, "orderby", &orderby);
     bson_from_buffer(&b, &bb);
 
-    cursor = mongo_find(conn, "local.oplog.$main", &b, NULL, 0, 0, 0);
+    cursor = mongo_find(conn, "local.oplog.$main", &b, NULL, 0, 0, 2);
 
     bson_destroy(&ts);
     bson_destroy(&query);

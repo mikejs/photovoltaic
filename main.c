@@ -96,7 +96,7 @@ void pv_parse_args(pv_conf *conf, int argc, char **argv) {
 int main(int argc, char **argv) {
     pv_conf conf;
     pv_schema *schema;
-    mongo_cursor *cursor;
+    mongo_cursor *cursor = NULL;
     bson_iterator it;
     bson_timestamp_t last = 0;
     solr_docset docset;
@@ -125,9 +125,17 @@ int main(int argc, char **argv) {
     while (1) {
         printf("Looping.\n");
 
-        cursor = pv_oplog_since(&conf.conn, last);
+        if (cursor && cursor->mm) {
+            mongo_cursor_get_more(cursor);
+            cursor->current.data = NULL;
+        }
 
-        /* TODO: tailable cursor */
+        if (!cursor || !cursor->mm || cursor->mm->fields.cursorID == 0) {
+            /* Need to recreate cursor */
+            printf("(Re)creating cursor\n");
+            cursor = pv_oplog_since(&conf.conn, last);
+        }
+
         while (mongo_cursor_next(cursor)) {
             const char *op;
             bson o, o2;
@@ -214,8 +222,6 @@ int main(int argc, char **argv) {
 
         solr_add_docset(docset);
         solr_docset_clear(docset);
-
-        mongo_cursor_destroy(cursor);
 
         sleep(conf.poll_interval);
     }
