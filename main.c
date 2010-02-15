@@ -16,8 +16,8 @@
   You should have received a copy of the GNU Affero General Public License
   along with photovoltaic.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include "bson.h"
 #include "mongo.h"
+#include "schema.h"
 #include "oplog.h"
 #include "solr.h"
 #include <string.h>
@@ -28,7 +28,7 @@
 
 typedef struct {
     mongo_connection conn;
-    char *watch_ns, *host;
+    char *host;
     int port, poll_interval;
 } pv_conf;
 
@@ -89,47 +89,13 @@ void pv_parse_args(pv_conf *conf, int argc, char **argv) {
     if (conf->port == 0){
         conf->port = 27017;
     }
-}
 
-bson_bool_t pv_parse_config(pv_conf *conf) {
-    bson_buffer bb;
-    bson b, out;
-    bson_iterator it;
-
-    bson_buffer_init(&bb);
-    bson_append_string(&bb, "_id", "conf");
-    bson_from_buffer(&b, &bb);
-
-    if (mongo_find_one(&conf->conn, "local.fts", &b, NULL, &out)) {
-        if (bson_find(&it, &out, "watch_ns")) {
-            conf->watch_ns = strdup(bson_iterator_string(&it));
-            if (conf->watch_ns == NULL) {
-                return 0;
-            }
-        }
-
-        if (bson_find(&it, &out, "poll_interval")) {
-            conf->poll_interval = bson_iterator_int(&it);
-        }
-    }
-
-    if (conf->watch_ns == NULL) {
-        conf->watch_ns = strdup("test.pv");
-        if (conf->watch_ns == NULL) {
-            return 0;
-        }
-    }
-
-    if (conf->poll_interval == 0) {
-        conf->poll_interval = 3;
-    }
-
-    bson_destroy(&b);
-    return 1;
+    conf->poll_interval = 2;
 }
 
 int main(int argc, char **argv) {
     pv_conf conf;
+    pv_schema *schema;
     mongo_cursor *cursor;
     bson_iterator it;
     bson_timestamp_t last = 0;
@@ -144,9 +110,12 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    pv_parse_config(&conf);
+    if ((schema = pv_get_schema(&conf.conn)) == NULL) {
+        printf("No schema.\n");
+        exit(1);
+    }
 
-    printf("Watching namespace: %s\n", conf.watch_ns);
+    printf("Watching namespace: %s\n", schema->watch_ns);
     printf("Polling interval: %d\n", conf.poll_interval);
 
     solr_init();
@@ -158,11 +127,18 @@ int main(int argc, char **argv) {
 
         cursor = pv_oplog_since(&conf.conn, last);
 
+        /* TODO: tailable cursor */
         while (mongo_cursor_next(cursor)) {
             const char *op;
             bson o, o2;
             bson_type type;
             solr_doc doc;
+            int field_count = 0;
+
+            bson_find(&it, &cursor->current, "ns");
+            if (strcmp(bson_iterator_string(&it), schema->watch_ns)) {
+                continue;
+            }
 
             bson_find(&it, &cursor->current, "ts");
             last = bson_iterator_timestamp(&it);
@@ -180,6 +156,9 @@ int main(int argc, char **argv) {
                 printf("Update %"PRIi64".\n", last);
                 bson_find(&it, &cursor->current, "o2");
                 bson_iterator_subobject(&it, &o2);
+            } else {
+                printf("Bad op type: %s", op);
+                continue;
             }
 
             bson_find(&it, &o2, "_id");
@@ -193,6 +172,7 @@ int main(int argc, char **argv) {
                 doc = solr_doc_new(oidhex);
             } else {
                 /* Can't handle other _id types yet */
+                printf("Bad ID type: %d\n", type);
                 continue;
             }
 
@@ -200,18 +180,35 @@ int main(int argc, char **argv) {
             while ((type = bson_iterator_next(&it)) != bson_eoo) {
                 const char *key = bson_iterator_key(&it);
 
+                if (schema->fields != NULL) {
+                    pv_field *field = schema->fields;
+                    int found = 0;
+
+                    while (field != NULL) {
+                        if (!strcmp(field->name, key)) {
+                            found = 1;
+                            break;
+                        }
+                        field = field->next;
+                    }
+
+                    if (!found) {
+                        continue;
+                    }
+                }
+
                 if (type == bson_string) {
-                    char *new_key;
-                    new_key = malloc(strlen(key) + 2 + 1);
-                    strcpy(new_key, key);
-                    strcat(new_key, "_s");
-                    solr_doc_add_field(doc, new_key, bson_iterator_string(&it));
-                    free(new_key);
+                    solr_doc_add_field(doc, key, bson_iterator_string(&it));
+                    field_count++;
                 } else {
                     continue;
                 }
+            }
 
+            if (field_count > 0) {
                 solr_docset_add_doc(docset, doc);
+            } else {
+                solr_doc_free(doc);
             }
         }
 

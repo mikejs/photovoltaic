@@ -52,7 +52,7 @@ for x in libs:
 
 env = conf.Finish()
 
-files = ['main.c', 'oplog.c', 'solr.c']
+files = ['main.c', 'schema.c', 'oplog.c', 'solr.c']
 
 env.Program('photovoltaic', files, LIBS=libs)
 

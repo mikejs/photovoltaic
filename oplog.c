@@ -29,7 +29,6 @@ mongo_cursor* pv_oplog_since(mongo_connection *conn,
     bson_from_buffer(&ts, &bb);
 
     bson_buffer_init(&bb);
-    bson_append_string(&bb, "ns", "test.pv");
     bson_append_bson(&bb, "ts", &ts);
     bson_from_buffer(&query, &bb);
 
