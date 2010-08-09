@@ -9,14 +9,15 @@ import pymongo
 __version__ = '0.1.0'
 
 
-def extract_fields(obj, fields):
-    doc = {}
-    _id = obj['_id']
-
-    if isinstance(_id, basestring) or isinstance(_id, int):
-        doc['id'] = _id
+def solr_id(id):
+    if isinstance(id, basestring) or isinstance(id, int):
+        return id
     else:
-        doc['id'] = repr(_id)
+        return repr(id)
+
+
+def extract_fields(obj, fields):
+    doc = {'id': solr_id(obj['_id'])}
 
     for field in obj.keys():
         if field in fields:
@@ -68,9 +69,15 @@ def run(mongo_host='localhost', mongo_port=27017,
 
         solr_docs = []
         for op in cursor:
-            if op['op'] in ['i', 'u'] and op['ns'] in schemas:
-                solr_docs.append(extract_fields(op['o'], schemas[op['ns']]))
+            if op['ns'] in schemas:
                 spec['ts'] = {'$gt': op['ts']}
+                if op['op'] == 'd':
+                    id = solr_id(op['o']['_id'])
+                    solr.delete(id=id)
+                    logging.debug("Deleting document with id '%s'" % id)
+                if op['op'] in ['i', 'u']:
+                    solr_docs.append(extract_fields(op['o'],
+                                                    schemas[op['ns']]))
 
         if solr_docs:
             logging.debug('Sending %d docs to solr' % len(solr_docs))
