@@ -1,26 +1,10 @@
 #!/usr/bin/env python
 import time
 import logging
+from collections import defaultdict
 
 import pysolr
 import pymongo
-
-
-class Schema(object):
-    def __init__(self, doc, solr=None):
-        self.ns = doc['ns']
-        self.fields = doc['fields']
-
-    def match(self, op):
-        return op['ns'] == self.ns and op['op'] in ['i', 'u']
-
-    def run(self, op):
-        o = op['o']
-        obj = {'id': str(o['_id'])}
-        for field in self.fields:
-            if field in o:
-                obj[field] = o[field]
-        return obj
 
 
 def init(conn, solr, schemas):
@@ -40,7 +24,11 @@ def run(mongo_host='localhost', mongo_port=27017,
     conn = pymongo.Connection(mongo_host, mongo_port)
     db = conn.local
     solr = pysolr.Solr(solr_url)
-    schemas = [Schema(o) for o in db.fts.schemas.find()]
+
+    schemas = defaultdict(set)
+    for o in db.fts.schemas.find():
+        schemas[o['ns']].union(o['fields'])
+
     spec = {}
     cursor = None
 
@@ -63,10 +51,20 @@ def run(mongo_host='localhost', mongo_port=27017,
 
         solr_docs = []
         for op in cursor:
-            if op['op'] in ['i', 'u']:
-                for schema in schemas:
-                    if schema.match(op):
-                        solr_docs.append(schema.run(op))
+            if op['op'] in ['i', 'u'] and op['ns'] in schemas:
+                obj = op['o']
+                _id = obj['_id']
+                doc = {}
+
+                if isinstance(_id, basestring) or isinstance(_id, int):
+                    doc['id'] = _id
+                else:
+                    doc['id'] = repr(_id)
+
+                for field in schemas[op['ns']]:
+                    doc[field] = obj[field]
+                solr_docs.append(doc)
+
                 spec['ts'] = {'$gt': op['ts']}
 
         if solr_docs:
