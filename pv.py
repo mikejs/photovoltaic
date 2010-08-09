@@ -1,7 +1,9 @@
 #!/usr/bin/env python
-import pymongo
-import pysolr
 import time
+import logging
+
+import pysolr
+import pymongo
 
 
 class Schema(object):
@@ -23,7 +25,8 @@ class Schema(object):
 
 def init(conn, solr, schemas):
     for schema in schemas:
-        print "Init for all documents in ns: '%s'" % schema.ns
+        logging.debug("Importing all documents from ns '%s' to solr" %
+                      schema.ns)
         coll = conn
         for part in schema.ns.split('.'):
             coll = coll[part]
@@ -54,8 +57,6 @@ def run(mongo_host='localhost', mongo_port=27017,
         init(conn, solr, schemas)
 
     while True:
-        print "LOOP"
-
         if not cursor or not cursor.alive:
             cursor = db.oplog['$main'].find(spec, tailable=True).sort(
                 "$natural", 1)
@@ -69,7 +70,7 @@ def run(mongo_host='localhost', mongo_port=27017,
                 spec['ts'] = {'$gt': op['ts']}
 
         if solr_docs:
-            print "Adding: %s" % str(solr_docs)
+            logging.debug('Sending %d docs to solr' % len(solr_docs))
             solr.add(solr_docs)
 
         db.fts.save({'_id': 'state', 'ts': spec['ts']['$gt']})
@@ -79,6 +80,8 @@ def run(mongo_host='localhost', mongo_port=27017,
 
 if __name__ == '__main__':
     import argparse
+
+    logging.basicConfig(level=logging.DEBUG)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--mongo_host', '-m', dest='mongo_host', type=str,
