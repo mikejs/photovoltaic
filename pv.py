@@ -7,16 +7,31 @@ import pysolr
 import pymongo
 
 
+def extract_fields(obj, fields):
+    doc = {}
+    _id = obj['_id']
+
+    if isinstance(_id, basestring) or isinstance(_id, int):
+        doc['id'] = _id
+    else:
+        doc['id'] = repr(_id)
+
+    for field in obj.keys():
+        if field in fields:
+            doc[field] = obj[field]
+
+    return doc
+
+
 def init(conn, solr, schemas):
-    for schema in schemas:
-        logging.debug("Importing all documents from ns '%s' to solr" %
-                      schema.ns)
+    for ns, fields in schemas.items():
+        logging.debug("Importing all documents from ns '%s' to solr" % ns)
+
         coll = conn
-        for part in schema.ns.split('.'):
+        for part in ns.split('.'):
             coll = coll[part]
 
-        docs = [schema.run({'o': obj}) for obj in coll.find()]
-        solr.add(docs)
+        solr.add([extract_fields(obj, fields) for obj in coll.find()])
 
 
 def run(mongo_host='localhost', mongo_port=27017,
@@ -27,7 +42,7 @@ def run(mongo_host='localhost', mongo_port=27017,
 
     schemas = defaultdict(set)
     for o in db.fts.schemas.find():
-        schemas[o['ns']].union(o['fields'])
+        schemas[o['ns']] = schemas[o['ns']].union(o['fields'])
 
     spec = {}
     cursor = None
@@ -52,19 +67,7 @@ def run(mongo_host='localhost', mongo_port=27017,
         solr_docs = []
         for op in cursor:
             if op['op'] in ['i', 'u'] and op['ns'] in schemas:
-                obj = op['o']
-                _id = obj['_id']
-                doc = {}
-
-                if isinstance(_id, basestring) or isinstance(_id, int):
-                    doc['id'] = _id
-                else:
-                    doc['id'] = repr(_id)
-
-                for field in schemas[op['ns']]:
-                    doc[field] = obj[field]
-                solr_docs.append(doc)
-
+                solr_docs.append(extract_fields(op['o'], schemas[op['ns']]))
                 spec['ts'] = {'$gt': op['ts']}
 
         if solr_docs:
