@@ -6,6 +6,8 @@ from collections import defaultdict
 import pysolr
 import pymongo
 
+__version__ = '0.1.0'
+
 
 def extract_fields(obj, fields):
     doc = {}
@@ -95,6 +97,8 @@ if __name__ == '__main__':
     parser.add_argument('--solr_url', '-s', dest='solr_url', type=str,
                         default="http://127.0.0.1:8983/solr/",
                         help="URL of the Solr instance to use")
+    parser.add_argument('--version', '-v', action='version',
+                        version='%(prog)s ' + __version__)
 
     args = parser.parse_args()
 
